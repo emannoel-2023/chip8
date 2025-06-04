@@ -1,0 +1,11 @@
+# Binários do projeto
+chip8.exe
+
+# Pastas de bibliotecas SDL
+SDL2-2.32.8/
+SDL3-3.2.14/
+SDL3-3.2.16/
+
+# Outros arquivos de compilação temporários (opcional, mas boa prática)
+*.o
+*.exe
