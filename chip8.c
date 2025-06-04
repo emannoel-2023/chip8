@@ -15,6 +15,7 @@ typedef struct {
 	uint32_t window_height;
 	uint32_t fg_color;
 	uint32_t bg_color;
+	uint32_t scale_factor;
 } config_t;
 
 // inicio SDL
@@ -26,7 +27,8 @@ bool init_sdl(sdl_t *sdl, const config_t config){
 
 	sdl->window = SDL_CreateWindow("Chip8 do barones", SDL_WINDOWPOS_CENTERED,
 					SDL_WINDOWPOS_CENTERED,
-					config.window_width,config.window_height,
+					config.window_width * config.scale_factor,
+					config.window_height * config.scale_factor,
 					0);
 	if (!sdl->window){
 		SDL_Log("Impossivel criar a janela SDL %s\n", SDL_GetError());
@@ -49,8 +51,9 @@ bool set_config_from_args(config_t *config, const int argc, char **argv) {
 	*config = (config_t) {
 		.window_width = 64, // resolucao X original chip8 
 		.window_height = 32, // resolucao Y original chip8
-		.fg_color = 0xFFFF00FF, // amarelo
-		.bg_color = 0x00000000, // preto
+		.fg_color = 0xFFFFFFFF, // amarelo
+		.bg_color = 0xFFFF00FF, // preto
+		.scale_factor = 20, 	// resolucao padrao 
 	};
 	
 	// substituir padroes dependendo do que foi passado no terminal
