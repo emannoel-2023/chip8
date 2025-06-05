@@ -191,6 +191,18 @@ void handle_input(chip8_t *chip8){
 						//escape key; sair da janela e fechar programa
 						chip8->state = QUIT;
 						return;
+					case SDLK_SPACE:
+						//barra de espoaço
+						if(chip8->state==RUNNING){
+							chip8->state = PAUSED;
+							puts("======PAUSED======");
+						}
+						else{
+							chip8->state = RUNNING;
+
+						}
+						return;
+							
 					default:
 						break;
 
@@ -206,6 +218,12 @@ void handle_input(chip8_t *chip8){
 }
 
 int main(int argc, char **argv) {
+	
+	if(argc <2) {
+		fprintf(stderr, "Usage: %s <rom_name>\n",argv[0]);
+		exit(EXIT_FAILURE);
+	}
+
 	config_t config = {0};
 	if (!set_config_from_args(&config, argc, argv)) exit(EXIT_FAILURE);
 
@@ -227,7 +245,7 @@ int main(int argc, char **argv) {
 	while(chip8.state != QUIT){
 		//input do usuario
 		handle_input(&chip8);
-		//if 
+		if (chip8.state == PAUSED) continue; 
 		// get time()
 		// instrucoes do emulador de chip8
 		// Get_time() elapsed since last get_time()
