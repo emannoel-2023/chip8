@@ -186,7 +186,34 @@ void clear_screen(const sdl_t sdl, const config_t config){
 	SDL_RenderClear(sdl.renderer);
 }
 
-void update_screen(const sdl_t sdl){
+void update_screen(const sdl_t sdl,const config_t config, const chip8_t chip8){
+	SDL_Rect rect = {.x = 0, .y = 0, .w = config.scale_factor, .h = config.scale_factor};
+	
+	const uint8_t fg_r = (config.fg_color >> 24) & 0xFF;
+	const uint8_t fg_g = (config.fg_color >> 16) & 0xFF;
+	const uint8_t fg_b = (config.fg_color >>  8) & 0xFF;
+	const uint8_t fg_a = (config.fg_color >>  4) & 0xFF;
+
+	const uint8_t bg_r = (config.bg_color >> 24) & 0xFF;
+	const uint8_t bg_g = (config.bg_color >> 16) & 0xFF;
+	const uint8_t bg_b = (config.bg_color >>  8) & 0xFF;
+	const uint8_t bg_a = (config.bg_color >>  4) & 0xFF;
+
+	// loop through display pixels, draw a rectangle per pixel to the SDL window
+	for (uint32_t i = 0; i < sizeof chip8.display; i++){
+		rect.x = i % config.window_width;
+		rect.y = i / config.window_width;
+		
+		if (chip8.display[i]){
+			SDL_SetRenderDrawColor(sdl.renderer, fg_r, fg_g, fg_b, fg_a);
+			SDL_RenderFillRect(sdl.renderer, &rect);
+		} else{
+			SDL_SetRenderDrawColor(sdl.renderer, bg_r, bg_g, bg_b, bg_a);
+			SDL_RenderFillRect(sdl.renderer, &rect);
+
+		}
+	}
+
 	SDL_RenderPresent(sdl.renderer);
 }
 
@@ -271,6 +298,9 @@ void print_debug_info(chip8_t *chip8, const config_t config) {
 			chip8->I = chip8->inst.NNN;
 			break;
 
+		case 0x0D:
+			printf("Draw N (%u) height sprite at coords V%X (0x%02X), V%X (0x%02X)""from memory location I (0x%04X). Set VF= 1 if any pixels are turned off", chip8->inst.N, chip8->inst.X, chip8->V[chip8->inst.X], chip8->inst.Y,chip8->V[chip8->inst.Y],chip8->I);
+
 		
 		default:
 			printf("Unimplementd opcode\n");
@@ -331,14 +361,16 @@ void emulate_instruction(chip8_t *chip8, const config_t config){
 			// screen pixels are XOR'd with sprite bits,
 			// VF (carry flag) is set if any, screen pixels are set off; this is useful 
 			// for collision detection or reasons
-			const uint8_t X_coord = chip8->V[chip8->inst.X] % config.window_width;
-			const uint8_t Y_coord = chip8->V[chip8->inst.Y] % config.window_height;
+			uint8_t X_coord = chip8->V[chip8->inst.X] % config.window_width;
+			uint8_t Y_coord = chip8->V[chip8->inst.Y] % config.window_height;
+			const uint8_t orig_X = X_coord; // original X value
+
 			chip8->V[0xF] = 0; // initialize carry flag to 0
 
 			for (uint8_t i=0; i<chip8->inst.N; i++){
 				//get next byte/row of sprite data
 				const uint8_t sprite_data = chip8->ram[chip8->I + i];
-
+				X_coord = orig_X; // reset X for next row to draw
 				for (int8_t j= 7; j >=0; j--){
 					//if sprite pixel/bit is on and display pixel is on, set carry flag
 					bool *pixel = &chip8->display[Y_coord * config.window_width + X_coord];
@@ -348,7 +380,13 @@ void emulate_instruction(chip8_t *chip8, const config_t config){
 					}
 					//xor display pixel with sprite pixel/bit
 					*pixel ^= sprite_bit;
+
+					//stop drawing this row if hit right edge of screen
+					if (++X_coord >= config.window_width) break;
 				}
+				//stop drawing entire sprite if hit bottom edge of screen
+				//
+				if (++Y_coord >= config.window_height) break;
 			}
 			break;
 		default:
@@ -392,7 +430,7 @@ int main(int argc, char **argv) {
 		emulate_instruction(&chip8, config);
 		// Get_time() elapsed since last get_time()
 		SDL_Delay(16);
-		update_screen(sdl);
+		update_screen(sdl, config, chip8);
 
 	}
 
