@@ -30,19 +30,32 @@ typedef enum {
 
 } emulator_state_t;
 
+// CHIP8 formato de instrucao
+typedef struct {
+	uint16_t opcode;
+	uint16_t NNN; // 12 bit de endereco/constante
+	uint8_t NN; //8 bit constate
+	uint8_t N; //8 bit constate
+	uint8_t X; //4 bit registrador indetificador
+	uint8_t Y; //4 bit registrador indentificador
+}instruction_t;
+
+
 //CHIP8 MAQUINA OBJETO
 typedef struct {
 	emulator_state_t state;
 	uint8_t ram[4096];
 	bool display[64*32]; // resolucao original do chip8 display = &ram[0xF00]; display[10]
 	uint16_t stack[12]; // subrotina do stack
+	uint16_t *stack_ptr;
 	uint8_t V[16]; // registrador data V0-VF
 	uint16_t I; // Idex do registrador
 	uint16_t PC; // contador de programas
 	uint8_t delay_timer; // decrementa a 60hz quando >0 
 	uint8_t sound_timer; // decrementa a 60hz e toca um tom  quando >0
 	bool keypad[16]; // hexadecimal do teclado 0x0-0xF	
-	const char *rom_name; // rom rodando 
+	const char *rom_name; // rom rodando
+	instruction_t inst; //instrucao em execucao no momento
 } chip8_t;
 
 
@@ -80,7 +93,7 @@ bool set_config_from_args(config_t *config, const int argc, char **argv) {
 		.window_width = 64, // resolucao X original chip8 
 		.window_height = 32, // resolucao Y original chip8
 		.fg_color = 0xFFFFFFFF, // amarelo
-		.bg_color = 0xFFFF00FF, // preto
+		.bg_color = 0x000000FF, // preto
 		.scale_factor = 20, 	// resolucao padrao 
 	};
 	
@@ -148,6 +161,7 @@ bool init_chip8(chip8_t *chip8,const char rom_name[]){
 	chip8->state = RUNNING;
 	chip8->PC = entry_point; // comencando a rom neste entry point
 	chip8->rom_name = rom_name;
+	chip8->stack_ptr = &chip8->stack[0];
 	return true;
 
 }
@@ -217,6 +231,133 @@ void handle_input(chip8_t *chip8){
 
 }
 
+
+#ifdef DEBUG
+void print_debug_info(chip8_t *chip8, const config_t config) {
+	printf("Address: 0x%04X, opcode: 0x%04X Desc: ",
+	chip8->PC-2, chip8->inst.opcode);
+
+	switch ((chip8->inst.opcode >>12) & 0x0F) {
+		case 0x00:
+			if(chip8->inst.NN == 0xE0){
+				//0xE0: limpar a tela
+				printf("clear screen\n");
+			} else if (chip8->inst.NN == 0xEE){
+				//0x0EE: Return form subroutine
+				//set program counter to last address on subroutine stack ("pop" it off the stack)
+				//so that next opcode will gotten from that address
+				printf("Return from subroutine to address 0x%04X\n",
+	   				*(chip8->stack_ptr - 1));	
+			}else{
+				printf("unimplemented opcode\n");
+			}
+			break;
+		case 0x02:
+			//0x2NNN: call subroutine at NNN
+			//store current address to return to on subroutine stack("push" it on the stack)
+			//and set program counter to subroutine address so that the nest opcode
+			//is gotten from here.
+			*chip8->stack_ptr++ = chip8->PC;
+			chip8->PC = chip8->inst.NNN;
+			break;
+		case 0x06:
+			//0x6XNN set register VX to NN
+			printf("set register V%X to NN (0X%02X)\n",
+				chip8->inst.X, chip8->inst.NN);
+			break;
+		case 0x0A:
+			//0xANNN set index register I to NNN
+			printf("set I to NNN (0x%04X)\n",chip8->inst.NNN);
+			chip8->I = chip8->inst.NNN;
+			break;
+
+		
+		default:
+			printf("Unimplementd opcode\n");
+			break;
+
+	}		
+}
+#endif
+
+// instrucao 1 de emulacao chip8
+void emulate_instruction(chip8_t *chip8, const config_t config){
+	// pega o proximo opcode da ram
+	chip8->inst.opcode = (chip8->ram[chip8->PC] << 8) | chip8->ram[chip8->PC+1];
+	chip8->PC +=2; // pre incremento para o proximo opcode
+	
+	// Fill out current instruction format
+	chip8->inst.NNN = chip8->inst.opcode & 0x0FFF;
+	chip8->inst.NN = chip8->inst.opcode & 0x0FF;
+	chip8->inst.N = chip8->inst.opcode & 0x0F;
+	chip8->inst.X = (chip8->inst.opcode >> 8) & 0x0F;
+	chip8->inst.Y = (chip8->inst.opcode >>4) & 0x0F;
+
+#ifdef DEBUG
+	print_debug_info(chip8);
+#endif
+
+	//emulate opcode
+	switch ((chip8->inst.opcode >>12) & 0x0F) {
+		case 0x00:
+			if(chip8->inst.NN == 0xE0){
+				//0xE0: limpar a tela
+				memset(&chip8->display[0],false,sizeof chip8->display);
+			} else if (chip8->inst.NN == 0xEE){
+				//0x0EE: Return form subroutine
+				//set program counter to last address on subroutine stack ("pop" it off the stack)
+				//so that next opcode will gotten from that address
+				chip8->PC = *--chip8->stack_ptr;	
+			}
+			break;
+		case 0x02:
+			//0x2NNN: call subroutine at NNN
+			//store current address to return to on subroutine stack("push" it on the stack)
+			//and set program counter to subroutine address so that the nest opcode
+			//is gotten from here.
+			*chip8->stack_ptr++ = chip8->PC;
+			chip8->PC = chip8->inst.NNN;
+			break;
+		case 0x06:
+			//0x6XNN set register VX to NN
+			chip8->V[chip8->inst.X] = chip8->inst.NN;
+			break;
+		case 0x0A:
+			//0xANNN set index register I to NNN
+			chip8->I = chip8->inst.NNN;
+			break;
+		case 0x0D:
+			// 0zDXYN : draw N height sprite at coords X,Y; Read from memory location I;
+			// screen pixels are XOR'd with sprite bits,
+			// VF (carry flag) is set if any, screen pixels are set off; this is useful 
+			// for collision detection or reasons
+			const uint8_t X_coord = chip8->V[chip8->inst.X] % config.window_width;
+			const uint8_t Y_coord = chip8->V[chip8->inst.Y] % config.window_height;
+			chip8->V[0xF] = 0; // initialize carry flag to 0
+
+			for (uint8_t i=0; i<chip8->inst.N; i++){
+				//get next byte/row of sprite data
+				const uint8_t sprite_data = chip8->ram[chip8->I + i];
+
+				for (int8_t j= 7; j >=0; j--){
+					//if sprite pixel/bit is on and display pixel is on, set carry flag
+					bool *pixel = &chip8->display[Y_coord * config.window_width + X_coord];
+					const bool sprite_bit = (sprite_data & (1 << j));
+					if (sprite_bit && *pixel){
+						chip8->V[0xF] = 1;
+					}
+					//xor display pixel with sprite pixel/bit
+					*pixel ^= sprite_bit;
+				}
+			}
+			break;
+		default:
+			break;
+
+	}
+}	
+
+
 int main(int argc, char **argv) {
 	
 	if(argc <2) {
@@ -248,6 +389,7 @@ int main(int argc, char **argv) {
 		if (chip8.state == PAUSED) continue; 
 		// get time()
 		// instrucoes do emulador de chip8
+		emulate_instruction(&chip8, config);
 		// Get_time() elapsed since last get_time()
 		SDL_Delay(16);
 		update_screen(sdl);
