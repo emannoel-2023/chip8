@@ -201,8 +201,8 @@ void update_screen(const sdl_t sdl,const config_t config, const chip8_t chip8){
 
 	// loop through display pixels, draw a rectangle per pixel to the SDL window
 	for (uint32_t i = 0; i < sizeof chip8.display; i++){
-		rect.x = i % config.window_width;
-		rect.y = i / config.window_width;
+		rect.x = (i % config.window_width) * config.scale_factor;
+		rect.y = (i / config.window_width) * config.scale_factor;
 		
 		if (chip8.display[i]){
 			SDL_SetRenderDrawColor(sdl.renderer, fg_r, fg_g, fg_b, fg_a);
@@ -260,7 +260,7 @@ void handle_input(chip8_t *chip8){
 
 
 #ifdef DEBUG
-void print_debug_info(chip8_t *chip8, const config_t config) {
+void print_debug_info(chip8_t *chip8) {
 	printf("Address: 0x%04X, opcode: 0x%04X Desc: ",
 	chip8->PC-2, chip8->inst.opcode);
 
@@ -292,6 +292,11 @@ void print_debug_info(chip8_t *chip8, const config_t config) {
 			printf("set register V%X to NN (0X%02X)\n",
 				chip8->inst.X, chip8->inst.NN);
 			break;
+		case 0x07:
+			//0x7XNN set register VX += NN
+			printf("set register V%X (0x%02X)+= NN (0X%02X). Result: 0x%02X\n",
+	  			chip8->inst.X, chip8->V[chip8->inst.X], chip8->inst.NN,chip8->V[chip8->inst.X]+ chip8->inst.NN);
+			break;
 		case 0x0A:
 			//0xANNN set index register I to NNN
 			printf("set I to NNN (0x%04X)\n",chip8->inst.NNN);
@@ -299,8 +304,12 @@ void print_debug_info(chip8_t *chip8, const config_t config) {
 			break;
 
 		case 0x0D:
-			printf("Draw N (%u) height sprite at coords V%X (0x%02X), V%X (0x%02X)""from memory location I (0x%04X). Set VF= 1 if any pixels are turned off", chip8->inst.N, chip8->inst.X, chip8->V[chip8->inst.X], chip8->inst.Y,chip8->V[chip8->inst.Y],chip8->I);
-
+			printf("Draw N (%u) height sprite at coords V%X (0x%02X), V%X (0x%02X)"
+	  			"from memory location I (0x%04X). Set VF= 1 if any pixels are turned off\n", 
+	  			chip8->inst.N, chip8->inst.X, chip8->V[chip8->inst.X], chip8->inst.Y,
+	  			chip8->V[chip8->inst.Y],chip8->I);
+			
+			break;
 		
 		default:
 			printf("Unimplementd opcode\n");
@@ -351,6 +360,10 @@ void emulate_instruction(chip8_t *chip8, const config_t config){
 		case 0x06:
 			//0x6XNN set register VX to NN
 			chip8->V[chip8->inst.X] = chip8->inst.NN;
+			break;
+		case 0x07:
+			//0x7XNN set register VX += NN
+			chip8->V[chip8->inst.X] += chip8->inst.NN;
 			break;
 		case 0x0A:
 			//0xANNN set index register I to NNN
