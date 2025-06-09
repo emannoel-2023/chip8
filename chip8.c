@@ -18,6 +18,7 @@ typedef struct {
 	uint32_t fg_color;
 	uint32_t bg_color;
 	uint32_t scale_factor;
+	bool pixel_outlines;
 } config_t;
 
 
@@ -95,6 +96,7 @@ bool set_config_from_args(config_t *config, const int argc, char **argv) {
 		.fg_color = 0xFFFFFFFF, // amarelo
 		.bg_color = 0x000000FF, // preto
 		.scale_factor = 20, 	// resolucao padrao 
+		.pixel_outlines = true,
 	};
 	
 	// substituir padroes dependendo do que foi passado no terminal
@@ -207,6 +209,12 @@ void update_screen(const sdl_t sdl,const config_t config, const chip8_t chip8){
 		if (chip8.display[i]){
 			SDL_SetRenderDrawColor(sdl.renderer, fg_r, fg_g, fg_b, fg_a);
 			SDL_RenderFillRect(sdl.renderer, &rect);
+
+			//if user requested drawing pixel outlines, draw those here
+			if(config.pixel_outlines){
+				SDL_SetRenderDrawColor(sdl.renderer, bg_r, bg_g, bg_b, bg_a);
+				SDL_RenderDrawRect(sdl.renderer, &rect);
+			}
 		} else{
 			SDL_SetRenderDrawColor(sdl.renderer, bg_r, bg_g, bg_b, bg_a);
 			SDL_RenderFillRect(sdl.renderer, &rect);
@@ -279,6 +287,11 @@ void print_debug_info(chip8_t *chip8) {
 				printf("unimplemented opcode\n");
 			}
 			break;
+		case 0x01:
+			//0x1NNN: jump to address NNN
+			printf("jump to address NNN (0x%04X)\n",
+				chip8->inst.NNN);
+			break;
 		case 0x02:
 			//0x2NNN: call subroutine at NNN
 			//store current address to return to on subroutine stack("push" it on the stack)
@@ -287,6 +300,7 @@ void print_debug_info(chip8_t *chip8) {
 			*chip8->stack_ptr++ = chip8->PC;
 			chip8->PC = chip8->inst.NNN;
 			break;
+			
 		case 0x06:
 			//0x6XNN set register VX to NN
 			printf("set register V%X to NN (0X%02X)\n",
@@ -348,6 +362,10 @@ void emulate_instruction(chip8_t *chip8, const config_t config){
 				//so that next opcode will gotten from that address
 				chip8->PC = *--chip8->stack_ptr;	
 			}
+			break;
+		case 0x01:
+			//0x1NNN: jump to address NNN
+			chip8->PC = chip8->inst.NNN; // set program counte so that next opcode is from NNN
 			break;
 		case 0x02:
 			//0x2NNN: call subroutine at NNN
