@@ -300,7 +300,24 @@ void print_debug_info(chip8_t *chip8) {
 			*chip8->stack_ptr++ = chip8->PC;
 			chip8->PC = chip8->inst.NNN;
 			break;
-			
+
+		case 0x03:
+			//0x3XNN: check if VX == NN, if so, skip the next instruction
+			printf("check if V%X (0x%02X) == NN (0x%02X), skip next instruction if true\n",
+	  			chip8->inst.X, chip8->V[chip8->inst.X],chip8->inst.NN);
+			break;
+		case 0x04:
+			//0x4XNN: check if VX != NN, if so, skip the next instruction
+				printf("check if V%X (0x%02X) != NN (0x%02X), skip next instruction if true\n",
+	  			chip8->inst.X, chip8->V[chip8->inst.X],chip8->inst.NN);
+
+			break;
+		case 0x05:
+			// 0x5XY0: check if VX != NN, if so, skip the next insctruction
+			printf("check if V%X (0x%02X) == V%X (0x%02X), skip next instruction if true\n",
+	  			chip8->inst.X, chip8->V[chip8->inst.X],
+	  			chip8->inst.Y, chip8->V[chip8->inst.Y]);
+			break;
 		case 0x06:
 			//0x6XNN set register VX to NN
 			printf("set register V%X to NN (0X%02X)\n",
@@ -361,6 +378,8 @@ void emulate_instruction(chip8_t *chip8, const config_t config){
 				//set program counter to last address on subroutine stack ("pop" it off the stack)
 				//so that next opcode will gotten from that address
 				chip8->PC = *--chip8->stack_ptr;	
+			} else {
+				//unimplemented/invalid opcode, may be 0xNNN for caling machine code routine for RCA1802
 			}
 			break;
 		case 0x01:
@@ -375,6 +394,22 @@ void emulate_instruction(chip8_t *chip8, const config_t config){
 			*chip8->stack_ptr++ = chip8->PC;
 			chip8->PC = chip8->inst.NNN;
 			break;
+		case 0x03:
+			//0x3XNN: check if VX == NN, if so, skip the next instruction
+			if(chip8->V[chip8->inst.X]== chip8->inst.NN)
+				chip8->PC += 2; //skip next opcode/instruction
+			break;
+		case 0x04:
+			//0x3XNN: check if VX != NN, if so, skip the next instruction
+			if(chip8->V[chip8->inst.X] != chip8->inst.NN)
+				chip8->PC += 2; //skip next opcode/instruction
+			break;
+		case 0x05:
+			// 0x5XY0: check if VX != NN, if so, skip the next insctruction
+			if(chip8->inst.N != 0) break;
+			if(chip8->V[chip8->inst.X] == chip8->V[chip8->inst.Y])
+				chip8->PC +=2; //skip next opcode/instruction
+			break;
 		case 0x06:
 			//0x6XNN set register VX to NN
 			chip8->V[chip8->inst.X] = chip8->inst.NN;
@@ -383,6 +418,42 @@ void emulate_instruction(chip8_t *chip8, const config_t config){
 			//0x7XNN set register VX += NN
 			chip8->V[chip8->inst.X] += chip8->inst.NN;
 			break;
+		case 0x08:
+			switch(chip8->inst.N) {
+				case 0:
+					//0x8XY0: set register VX = VY
+					chip8->V[chip8->inst.X] = chip8->V[chip8->inst.Y];
+					break;
+				case 1:
+					//0x8XY1: set register VX |= VY
+					chip8->V[chip8->inst.X] |= chip8->V[chip8->inst.Y];
+					break;
+				case 2:
+					//0x8XY2: set register VX &= VY
+					chip8->V[chip8->inst.X] &= chip8->V[chip8->inst.Y];
+					break;
+				case 3:
+					//0x8XY3: set register VX ^= VY
+					chip8->V[chip8->inst.X] ^= chip8->V[chip8->inst.Y];
+					break;
+				case 4:
+					//0x8XY4: set register VX += VY set VF to 1 if carry
+					if((uint16_t)(chip8->V[chip8->inst.X] + chip8->V[chip8->inst.Y])>255)
+						chip8->V[0xF] = 1;
+					chip8->V[chip8->inst.X] += chip8->V[chip8->inst.Y];
+					break;
+				case 5:
+					//0x8XY5: set register VX -= VY, set VF to 1 if there is not a borrow (result is positive)
+					if(chip8->V[chip8->inst.Y] > chip8->V[chip8->inst.X])
+						chip8->V[0xF]= 1;
+					chip8->V[chip8->inst.X] -= chip8->V[chip8->inst.Y];
+					break;
+				default:
+					//wrong/unimplemented opcode
+					break;
+			}
+			break;
+			
 		case 0x0A:
 			//0xANNN set index register I to NNN
 			chip8->I = chip8->inst.NNN;
