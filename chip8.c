@@ -443,10 +443,21 @@ void emulate_instruction(chip8_t *chip8, const config_t config){
 					chip8->V[chip8->inst.X] += chip8->V[chip8->inst.Y];
 					break;
 				case 5:
-					//0x8XY5: set register VX -= VY, set VF to 1 if there is not a borrow (result is positive)
-					if(chip8->V[chip8->inst.Y] > chip8->V[chip8->inst.X])
-						chip8->V[0xF]= 1;
+					//0x8XY5: set register VX -= VY, set VF to 1 if there is not a borrow (result is positive/0)
+					if(chip8->V[chip8->inst.Y] < chip8->V[chip8->inst.X])
+						chip8->V[0xF] = 1;
 					chip8->V[chip8->inst.X] -= chip8->V[chip8->inst.Y];
+					break;
+				case 6:
+					//0x8XY6: set register VX >>=1, store shifted off bit in VF
+					chip8->V[0xF] = chip->[chip8->inst.X] & 1;
+					chip8->[chip8->inst.X] >>= 1;
+					break;
+				case 7:
+					//0x8XY7 set register VX = VY - VX, set VF to 1 if there is not a borrow (result is positive/0)
+				if(chip8->V[chip8->inst.X] <= chip8->V[chip8->inst.Y])
+						chip8->V[0xF] = 1;
+					chip8->V[chip8->inst.X] = chip8->V[chip8->inst.Y] - chip8->V[chip8->inst.X];
 					break;
 				default:
 					//wrong/unimplemented opcode
